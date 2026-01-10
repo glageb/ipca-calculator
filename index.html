@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Calculadora de investimentos ajustados pelo IPCA - Calcule o valor real do seu investimento considerando a inflação brasileira">
+    <meta name="keywords" content="IPCA, inflação, investimento, Brasil, calculadora">
+    <title>Calculadora IPCA - Investimentos Ajustados pela Inflação</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <span class="title-icon">📈</span>
+                    Calculadora IPCA
+                </h1>
+                <p class="subtitle">Calcule o valor real do seu investimento ajustado pela inflação brasileira</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Card -->
+            <section class="card input-card">
+                <h2 class="card-title">Dados do Investimento</h2>
+
+                <form id="calculatorForm" class="calculator-form">
+                    <div class="form-group">
+                        <label for="investmentAmount" class="form-label">
+                            Valor Inicial (R$)
+                        </label>
+                        <div class="input-wrapper">
+                            <span class="input-prefix">R$</span>
+                            <input type="number" id="investmentAmount" class="form-input" placeholder="10000.00"
+                                step="0.01" min="0.01" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fixedRate" class="form-label">
+                            Taxa Fixa Anual (% a.a.)
+                        </label>
+                        <div class="input-wrapper">
+                            <span class="input-prefix">%</span>
+                            <input type="number" id="fixedRate" class="form-input" placeholder="5.00" step="0.01"
+                                min="0" value="0">
+                        </div>
+                        <small class="form-hint">Taxa adicional ao IPCA (ex: 5% = IPCA + 5% a.a.)</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="startDate" class="form-label">
+                                Data Inicial
+                            </label>
+                            <input type="date" id="startDate" class="form-input" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="endDate" class="form-label">
+                                Data Final
+                            </label>
+                            <input type="date" id="endDate" class="form-input" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="calculateBtn">
+                        <span class="btn-text">Calcular</span>
+                        <span class="btn-loader" style="display: none;">
+                            <span class="spinner"></span>
+                            Calculando...
+                        </span>
+                    </button>
+                </form>
+
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+            </section>
+
+            <!-- Results Card -->
+            <section class="card results-card" id="resultsCard" style="display: none;">
+                <h2 class="card-title">Resultados</h2>
+
+                <div class="results-grid">
+                    <div class="result-item">
+                        <div class="result-label">Valor Inicial</div>
+                        <div class="result-value" id="initialValue">R$ 0,00</div>
+                    </div>
+
+                    <div class="result-item highlight">
+                        <div class="result-label">Valor Final (IPCA + Taxa Fixa)</div>
+                        <div class="result-value large" id="finalValue">R$ 0,00</div>
+                    </div>
+
+                    <div class="result-item">
+                        <div class="result-label">Variação Total do IPCA</div>
+                        <div class="result-value" id="totalVariation">0,00%</div>
+                    </div>
+
+                    <div class="result-item">
+                        <div class="result-label">Taxa Fixa Aplicada</div>
+                        <div class="result-value" id="fixedRateDisplay">0,00% a.a.</div>
+                    </div>
+
+                    <div class="result-item">
+                        <div class="result-label">Ganho Real Total</div>
+                        <div class="result-value" id="totalGain">0,00%</div>
+                    </div>
+
+                    <div class="result-item">
+                        <div class="result-label">Período</div>
+                        <div class="result-value" id="period">-</div>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <p class="info-text">
+                        💡 <strong>O que significa?</strong> Se você tivesse investido <span id="infoInitial">R$
+                            0,00</span>
+                        em <span id="infoStartDate">-</span>, precisaria de <span id="infoFinal">R$ 0,00</span>
+                        em <span id="infoEndDate">-</span> para manter o mesmo poder de compra, considerando a inflação
+                        medida pelo IPCA.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Chart Card -->
+            <section class="card chart-card" id="chartCard" style="display: none;">
+                <h2 class="card-title">Evolução do Investimento</h2>
+                <div class="chart-container">
+                    <canvas id="investmentChart"></canvas>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p class="footer-text">
+                Dados fornecidos pelo <a href="https://www.bcb.gov.br/" target="_blank" rel="noopener noreferrer">Banco
+                    Central do Brasil</a>
+            </p>
+            <p class="footer-note">
+                IPCA: Índice Nacional de Preços ao Consumidor Amplo
+            </p>
+        </footer>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="app.js"></script>
+</body>
+
+</html>
