@@ -15,6 +15,18 @@ This application allows users to:
 
 ## 🚀 Features
 
+### Funcionalidades
+
+*   **Simulação de Cenários**:
+    *   **IPCA + Taxa Fixa**: Corrige o investimento pela inflação (IPCA) e aplica uma taxa de juros fixa. Ideal para Tesouro IPCA+.
+    *   **SELIC + Taxa Fixa**: Utiliza a taxa SELIC acumulada mensalmente mais uma taxa fixa.
+    *   **Apenas Taxa Fixa**: Simula um investimento prefixado, sem correção por índice econômico.
+*   **Dados Reais**: Consulta automática ao Banco Central para obter as séries históricas:
+    *   IPCA (Série 433)
+    *   SELIC (Série 4390 - Acumulada no mês)
+*   **Cálculo Preciso**: Utiliza juros compostos mês a mês para máxima precisão.
+*   **Visualização Gráfica**: Gráfico interativo que compara o crescimento do índice puro vs. o investimento total.
+*   **Resultados Detalhados**: Mostra valor final, ganho real, variação total do índice e taxa efetiva aplicada.
 - **Real-time IPCA Data**: Fetches official data from Banco Central do Brasil API
 - **Accurate Calculations**: Uses compound interest formula for precise inflation adjustment
 - **Interactive Visualization**: Beautiful Chart.js line chart showing investment evolution

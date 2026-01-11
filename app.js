@@ -4,8 +4,11 @@
 
 // Configuration
 const CONFIG = {
-    API_BASE_URL: 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados',
-    IPCA_SERIES_CODE: 433,
+    API_BASE_URL: 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados',
+    SERIES: {
+        IPCA: 433,
+        SELIC: 4390
+    },
     DATE_FORMAT: 'dd/MM/yyyy'
 };
 
@@ -73,13 +76,15 @@ function parseAPIDate(dateString) {
 // ===================================
 
 /**
- * Fetch IPCA data from Banco Central API
+ * Fetch series data from Banco Central API
  */
-async function fetchIPCAData(startDate, endDate) {
+async function fetchSeriesData(seriesCode, startDate, endDate) {
     const startDateFormatted = formatDateForAPI(startDate);
     const endDateFormatted = formatDateForAPI(endDate);
 
-    const url = `${CONFIG.API_BASE_URL}?formato=json&dataInicial=${startDateFormatted}&dataFinal=${endDateFormatted}`;
+    // Replace placeholder with actual code
+    const baseUrl = CONFIG.API_BASE_URL.replace('{code}', seriesCode);
+    const url = `${baseUrl}?formato=json&dataInicial=${startDateFormatted}&dataFinal=${endDateFormatted}`;
 
     try {
         const response = await fetch(url);
@@ -96,8 +101,8 @@ async function fetchIPCAData(startDate, endDate) {
 
         return data;
     } catch (error) {
-        console.error('Erro ao buscar dados do IPCA:', error);
-        throw new Error('Não foi possível obter os dados do IPCA. Verifique sua conexão e tente novamente.');
+        console.error(`Erro ao buscar dados da série ${seriesCode}:`, error);
+        throw new Error('Não foi possível obter os dados. Verifique sua conexão e tente novamente.');
     }
 }
 
@@ -106,13 +111,13 @@ async function fetchIPCAData(startDate, endDate) {
 // ===================================
 
 /**
- * Calculate cumulative IPCA variation
+ * Calculate cumulative variation for a series
  * Uses compound formula: (1 + rate1/100) * (1 + rate2/100) * ... - 1
  */
-function calculateCumulativeIPCA(ipcaData) {
+function calculateCumulativeRate(seriesData) {
     let cumulativeFactor = 1;
 
-    for (const item of ipcaData) {
+    for (const item of seriesData) {
         const monthlyRate = parseFloat(item.valor);
         cumulativeFactor *= (1 + monthlyRate / 100);
     }
@@ -122,45 +127,47 @@ function calculateCumulativeIPCA(ipcaData) {
 }
 
 /**
- * Calculate investment value adjusted by IPCA + fixed rate
+ * Calculate investment value adjusted by series rate + fixed rate
  * Fixed rate is applied monthly as (annualRate / 12)
+ * For "Fixed Only" scenario, series rate is effectively 0
  */
-function calculateAdjustedValue(initialValue, ipcaData, annualFixedRate) {
+function calculateCompoundValue(initialValue, seriesData, annualFixedRate, useSeriesRate = true) {
     let adjustedValue = initialValue;
     const monthlyFixedRate = annualFixedRate / 12; // Convert annual to monthly
 
-    for (const item of ipcaData) {
-        const monthlyIPCA = parseFloat(item.valor);
-        // Compound both IPCA and fixed rate: (1 + IPCA/100) * (1 + fixedRate/100)
-        adjustedValue *= (1 + monthlyIPCA / 100) * (1 + monthlyFixedRate / 100);
+    for (const item of seriesData) {
+        const monthlySeriesRate = useSeriesRate ? parseFloat(item.valor) : 0;
+        // Compound both Series rate and fixed rate
+        adjustedValue *= (1 + monthlySeriesRate / 100) * (1 + monthlyFixedRate / 100);
     }
 
     return adjustedValue;
 }
 
 /**
- * Calculate investment evolution over time with fixed rate
- * Returns both IPCA-only and IPCA+fixed values for comparison
+ * Calculate investment evolution over time
+ * Returns both Series-only and Series+fixed values for comparison
  */
-function calculateInvestmentEvolution(initialValue, ipcaData, annualFixedRate) {
+function calculateInvestmentEvolution(initialValue, seriesData, annualFixedRate, useSeriesRate = true) {
     const evolution = [];
-    let currentValueIPCA = initialValue; // IPCA only
-    let currentValueCombined = initialValue; // IPCA + fixed rate
+    let currentValueSeries = initialValue; // Series only
+    let currentValueCombined = initialValue; // Series + fixed rate
     const monthlyFixedRate = annualFixedRate / 12;
 
-    for (const item of ipcaData) {
-        const monthlyIPCA = parseFloat(item.valor);
+    for (const item of seriesData) {
+        const monthlySeriesRate = useSeriesRate ? parseFloat(item.valor) : 0;
 
-        // Calculate IPCA-only value
-        currentValueIPCA *= (1 + monthlyIPCA / 100);
+        // Calculate Series-only value (or 0% growth if useSeriesRate is false)
+        currentValueSeries *= (1 + monthlySeriesRate / 100);
 
-        // Calculate combined value (IPCA + fixed rate)
-        currentValueCombined *= (1 + monthlyIPCA / 100) * (1 + monthlyFixedRate / 100);
+        // Calculate combined value (Series rate + fixed rate)
+        currentValueCombined *= (1 + monthlySeriesRate / 100) * (1 + monthlyFixedRate / 100);
 
         evolution.push({
             date: parseAPIDate(item.data),
-            valueIPCA: currentValueIPCA,
+            valueSeries: currentValueSeries,
             valueCombined: currentValueCombined,
+            monthlyRate: monthlySeriesRate,
             dateString: item.data
         });
     }
@@ -216,10 +223,16 @@ function setLoadingState(isLoading) {
 /**
  * Display results
  */
-function displayResults(initialValue, finalValue, totalVariation, startDate, endDate, fixedRate) {
+function displayResults(initialValue, finalValue, totalVariation, startDate, endDate, fixedRate, seriesLabel) {
     // Update result values
     document.getElementById('initialValue').textContent = formatCurrency(initialValue);
     document.getElementById('finalValue').textContent = formatCurrency(finalValue);
+
+    // Update label to reflect IPCA/SELIC/None
+    const variationLabel = document.getElementById('resultVariationLabel') ||
+        document.getElementById('totalVariation').previousElementSibling;
+    variationLabel.textContent = seriesLabel ? `Variação Total (${seriesLabel})` : 'Variação do Índice';
+
     document.getElementById('totalVariation').textContent = formatPercentage(totalVariation);
     document.getElementById('fixedRateDisplay').textContent = formatPercentage(fixedRate) + ' a.a.';
 
@@ -244,9 +257,9 @@ function displayResults(initialValue, finalValue, totalVariation, startDate, end
 }
 
 /**
- * Create or update chart with dual lines showing IPCA and fixed rate contributions
+ * Create or update chart with dual lines showing Series and fixed rate contributions
  */
-function updateChart(evolution, initialValue, fixedRate) {
+function updateChart(evolution, initialValue, fixedRate, seriesLabel) {
     const ctx = document.getElementById('investmentChart');
 
     // Destroy existing chart if it exists
@@ -263,13 +276,14 @@ function updateChart(evolution, initialValue, fixedRate) {
         }).format(date);
     });
 
-    const valuesIPCA = evolution.map(item => item.valueIPCA);
+    const valuesSeries = evolution.map(item => item.valueSeries);
     const valuesCombined = evolution.map(item => item.valueCombined);
+    const monthlyRates = evolution.map(item => item.monthlyRate);
 
     // Create gradients
-    const gradientIPCA = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
-    gradientIPCA.addColorStop(0, 'rgba(67, 233, 123, 0.3)');
-    gradientIPCA.addColorStop(1, 'rgba(67, 233, 123, 0.05)');
+    const gradientSeries = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
+    gradientSeries.addColorStop(0, 'rgba(67, 233, 123, 0.3)');
+    gradientSeries.addColorStop(1, 'rgba(67, 233, 123, 0.05)');
 
     const gradientCombined = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
     gradientCombined.addColorStop(0, 'rgba(79, 172, 254, 0.5)');
@@ -278,39 +292,50 @@ function updateChart(evolution, initialValue, fixedRate) {
     // Prepare datasets
     const datasets = [];
 
-    // Always show IPCA line
-    datasets.push({
-        label: 'Somente IPCA',
-        data: valuesIPCA,
-        borderColor: '#43e97b',
-        backgroundColor: gradientIPCA,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: '#43e97b',
-        pointHoverBorderColor: '#ffffff',
-        pointHoverBorderWidth: 2
-    });
-
-    // Only show combined line if there's a fixed rate
-    if (fixedRate > 0) {
+    // Show Series line only if there is a series
+    if (seriesLabel) {
         datasets.push({
-            label: `IPCA + ${fixedRate.toFixed(2)}% a.a.`,
-            data: valuesCombined,
-            borderColor: '#4facfe',
-            backgroundColor: gradientCombined,
-            borderWidth: 3,
+            label: `Somente ${seriesLabel}`,
+            data: valuesSeries,
+            monthlyRates: monthlyRates, // Store rates for tooltip
+            borderColor: '#43e97b',
+            backgroundColor: gradientSeries,
+            borderWidth: 2,
             fill: true,
             tension: 0.4,
             pointRadius: 0,
             pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#4facfe',
+            pointHoverBackgroundColor: '#43e97b',
             pointHoverBorderColor: '#ffffff',
             pointHoverBorderWidth: 2
         });
     }
+
+    // Combined line label
+    let combinedLabel = '';
+    if (seriesLabel && fixedRate > 0) {
+        combinedLabel = `${seriesLabel} + ${fixedRate.toFixed(2)}% a.a.`;
+    } else if (seriesLabel) {
+        combinedLabel = `Ajustado por ${seriesLabel}`;
+    } else {
+        combinedLabel = `Taxa Fixa ${fixedRate.toFixed(2)}% a.a.`;
+    }
+
+    datasets.push({
+        label: combinedLabel,
+        data: valuesCombined,
+        monthlyRates: monthlyRates, // Store rates here too
+        borderColor: '#4facfe',
+        backgroundColor: gradientCombined,
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: '#4facfe',
+        pointHoverBorderColor: '#ffffff',
+        pointHoverBorderWidth: 2
+    });
 
     // Create chart
     chartInstance = new Chart(ctx, {
@@ -351,7 +376,31 @@ function updateChart(evolution, initialValue, fixedRate) {
                     displayColors: false,
                     callbacks: {
                         label: function (context) {
-                            return 'Valor: ' + formatCurrency(context.parsed.y);
+                            let label = context.dataset.label + ': ' + formatCurrency(context.parsed.y);
+
+                            // Add rate information if available and using a series
+                            if (seriesLabel && context.dataset.monthlyRates) {
+                                const rate = context.dataset.monthlyRates[context.dataIndex];
+                                // Only add the rate line once per tooltip (usually checking if it's the first dataset or specific one)
+                                // But since we are in a label callback, we return a string or array of strings.
+                                // Let's append the rate to the label? No, separate line is better.
+                                // We can return an array: ['Value: R$...', 'Rate: 0.5%']
+                            }
+                            return label;
+                        },
+                        afterBody: function (contextItems) {
+                            // This runs once per tooltip (for all items)
+                            // We can use this to show the rate at the bottom
+                            if (!seriesLabel) return null;
+
+                            const context = contextItems[0];
+                            if (context.dataset.monthlyRates) {
+                                const rate = context.dataset.monthlyRates[context.dataIndex];
+                                if (rate !== undefined && rate !== null) {
+                                    return `Taxa ${seriesLabel}: ${formatPercentage(rate)}`;
+                                }
+                            }
+                            return null;
                         }
                     }
                 }
@@ -448,6 +497,7 @@ async function handleCalculation(event) {
     const fixedRate = parseFloat(document.getElementById('fixedRate').value) || 0;
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
+    const scenarioType = document.getElementById('scenarioType').value;
 
     try {
         // Validate inputs
@@ -456,19 +506,36 @@ async function handleCalculation(event) {
         // Show loading state
         setLoadingState(true);
 
-        // Fetch IPCA data
-        const ipcaData = await fetchIPCAData(startDate, endDate);
+        // Determine series code based on scenario
+        let seriesCode = CONFIG.SERIES.IPCA;
+        let seriesLabel = 'IPCA';
+        let useSeriesRate = true;
+
+        if (scenarioType === 'selic_fixed') {
+            seriesCode = CONFIG.SERIES.SELIC;
+            seriesLabel = 'SELIC';
+        } else if (scenarioType === 'fixed_only') {
+            // still fetch IPCA to get timeline/dates
+            seriesCode = CONFIG.SERIES.IPCA;
+            seriesLabel = null; // No series label for fixed only
+            useSeriesRate = false;
+        }
+
+        // Fetch Data
+        const seriesData = await fetchSeriesData(seriesCode, startDate, endDate);
 
         // Calculate results
-        const totalVariation = calculateCumulativeIPCA(ipcaData);
-        const finalValue = calculateAdjustedValue(amount, ipcaData, fixedRate);
-        const evolution = calculateInvestmentEvolution(amount, ipcaData, fixedRate);
+        const totalVariation = calculateCumulativeRate(seriesData);
+        const finalValue = calculateCompoundValue(amount, seriesData, fixedRate, useSeriesRate);
+        const evolution = calculateInvestmentEvolution(amount, seriesData, fixedRate, useSeriesRate);
 
         // Display results
-        displayResults(amount, finalValue, totalVariation, startDate, endDate, fixedRate);
+        const displayVariation = useSeriesRate ? totalVariation : 0;
+
+        displayResults(amount, finalValue, displayVariation, startDate, endDate, fixedRate, seriesLabel);
 
         // Update chart
-        updateChart(evolution, amount, fixedRate);
+        updateChart(evolution, amount, fixedRate, seriesLabel);
 
     } catch (error) {
         console.error('Erro no cálculo:', error);

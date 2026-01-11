@@ -284,12 +284,16 @@ body::before {
 
 /* Date Input Styling */
 .form-input[type="date"] {
-    color-scheme: dark;
+    /* Removing color-scheme: dark to have a predictable base (black icon) to invert */
+    color-scheme: normal;
 }
 
-.form-input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
+.form-input[type="date"]::-webkit-calendar-picker-indicator,
+#startDate::-webkit-calendar-picker-indicator,
+#endDate::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
     cursor: pointer;
+    opacity: 1;
 }
 
 /* ===================================

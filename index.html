@@ -7,7 +7,7 @@
     <meta name="description"
         content="Calculadora de investimentos ajustados pelo IPCA - Calcule o valor real do seu investimento considerando a inflação brasileira">
     <meta name="keywords" content="IPCA, inflação, investimento, Brasil, calculadora">
-    <title>Calculadora IPCA - Investimentos Ajustados pela Inflação</title>
+    <title>Calculadora Simples Renda Fixa</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 
 <body>
@@ -28,7 +28,7 @@
             <div class="header-content">
                 <h1 class="title">
                     <span class="title-icon">📈</span>
-                    Calculadora IPCA
+                    Calculadora Simples Renda Fixa
                 </h1>
                 <p class="subtitle">Calcule o valor real do seu investimento ajustado pela inflação brasileira</p>
             </div>
@@ -41,6 +41,19 @@
                 <h2 class="card-title">Dados do Investimento</h2>
 
                 <form id="calculatorForm" class="calculator-form">
+                    <div class="form-group">
+                        <label for="scenarioType" class="form-label">
+                            Tipo de Simulação
+                        </label>
+                        <div class="input-wrapper">
+                            <select id="scenarioType" class="form-input">
+                                <option value="ipca_fixed">IPCA + Taxa Fixa</option>
+                                <option value="selic_fixed">SELIC + Taxa Fixa</option>
+                                <option value="fixed_only">Apenas Taxa Fixa</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label for="investmentAmount" class="form-label">
                             Valor Inicial (R$)
@@ -155,7 +168,8 @@
                     Central do Brasil</a>
             </p>
             <p class="footer-note">
-                IPCA: Índice Nacional de Preços ao Consumidor Amplo
+                IPCA: Índice Nacional de Preços ao Consumidor Amplo<br>
+                SELIC: Sistema Especial de Liquidação e de Custódia
             </p>
         </footer>
     </div>
