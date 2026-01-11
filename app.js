@@ -148,32 +148,6 @@ function calculateCompoundValue(initialValue, seriesData, annualFixedRate, useSe
  * Calculate investment evolution over time
  * Returns both Series-only and Series+fixed values for comparison
  */
-function calculateInvestmentEvolution(initialValue, seriesData, annualFixedRate, useSeriesRate = true) {
-    const evolution = [];
-    let currentValueSeries = initialValue; // Series only
-    let currentValueCombined = initialValue; // Series + fixed rate
-    const monthlyFixedRate = annualFixedRate / 12;
-
-    for (const item of seriesData) {
-        const monthlySeriesRate = useSeriesRate ? parseFloat(item.valor) : 0;
-
-        // Calculate Series-only value (or 0% growth if useSeriesRate is false)
-        currentValueSeries *= (1 + monthlySeriesRate / 100);
-
-        // Calculate combined value (Series rate + fixed rate)
-        currentValueCombined *= (1 + monthlySeriesRate / 100) * (1 + monthlyFixedRate / 100);
-
-        evolution.push({
-            date: parseAPIDate(item.data),
-            valueSeries: currentValueSeries,
-            valueCombined: currentValueCombined,
-            monthlyRate: monthlySeriesRate,
-            dateString: item.data
-        });
-    }
-
-    return evolution;
-}
 
 // ===================================
 // UI Functions
@@ -223,7 +197,7 @@ function setLoadingState(isLoading) {
 /**
  * Display results
  */
-function displayResults(initialValue, finalValue, totalVariation, startDate, endDate, fixedRate, seriesLabel) {
+function displayResults(initialValue, finalValue, totalVariation, startDate, endDate, fixedRate, seriesLabel, isProjection = false, averageRate = 0) {
     // Update result values
     document.getElementById('initialValue').textContent = formatCurrency(initialValue);
     document.getElementById('finalValue').textContent = formatCurrency(finalValue);
@@ -246,9 +220,28 @@ function displayResults(initialValue, finalValue, totalVariation, startDate, end
 
     // Update info box
     document.getElementById('infoInitial').textContent = formatCurrency(initialValue);
-    document.getElementById('infoFinal').textContent = formatCurrency(finalValue);
     document.getElementById('infoStartDate').textContent = startDateFormatted;
+    document.getElementById('infoFinal').textContent = formatCurrency(finalValue);
     document.getElementById('infoEndDate').textContent = endDateFormatted;
+
+    // Handle Projection Warning
+    const existingWarning = document.getElementById('projectionWarning');
+    if (existingWarning) existingWarning.remove();
+
+    if (isProjection) {
+        const resultsCard = document.getElementById('resultsCard');
+        const warningDiv = document.createElement('div');
+        warningDiv.id = 'projectionWarning';
+        warningDiv.className = 'warning-box';
+        warningDiv.innerHTML = `
+            <p class="warning-text">
+                ⚠️ <strong>Atenção:</strong> O período selecionado avança para o futuro. 
+                Para os meses sem dados oficiais, foi utilizada uma projeção baseada na média dos últimos 12 meses do ${seriesLabel || 'índice'} 
+                (<strong>${averageRate.toFixed(2)}% ao mês</strong>).
+            </p>
+        `;
+        resultsCard.insertBefore(warningDiv, resultsCard.lastElementChild);
+    }
 
     // Show results card
     const resultsCard = document.getElementById('resultsCard');
@@ -259,184 +252,6 @@ function displayResults(initialValue, finalValue, totalVariation, startDate, end
 /**
  * Create or update chart with dual lines showing Series and fixed rate contributions
  */
-function updateChart(evolution, initialValue, fixedRate, seriesLabel) {
-    const ctx = document.getElementById('investmentChart');
-
-    // Destroy existing chart if it exists
-    if (chartInstance) {
-        chartInstance.destroy();
-    }
-
-    // Prepare data
-    const labels = evolution.map(item => {
-        const date = item.date;
-        return new Intl.DateTimeFormat('pt-BR', {
-            year: 'numeric',
-            month: 'short'
-        }).format(date);
-    });
-
-    const valuesSeries = evolution.map(item => item.valueSeries);
-    const valuesCombined = evolution.map(item => item.valueCombined);
-    const monthlyRates = evolution.map(item => item.monthlyRate);
-
-    // Create gradients
-    const gradientSeries = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
-    gradientSeries.addColorStop(0, 'rgba(67, 233, 123, 0.3)');
-    gradientSeries.addColorStop(1, 'rgba(67, 233, 123, 0.05)');
-
-    const gradientCombined = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
-    gradientCombined.addColorStop(0, 'rgba(79, 172, 254, 0.5)');
-    gradientCombined.addColorStop(1, 'rgba(0, 242, 254, 0.1)');
-
-    // Prepare datasets
-    const datasets = [];
-
-    // Show Series line only if there is a series
-    if (seriesLabel) {
-        datasets.push({
-            label: `Somente ${seriesLabel}`,
-            data: valuesSeries,
-            monthlyRates: monthlyRates, // Store rates for tooltip
-            borderColor: '#43e97b',
-            backgroundColor: gradientSeries,
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#43e97b',
-            pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2
-        });
-    }
-
-    // Combined line label
-    let combinedLabel = '';
-    if (seriesLabel && fixedRate > 0) {
-        combinedLabel = `${seriesLabel} + ${fixedRate.toFixed(2)}% a.a.`;
-    } else if (seriesLabel) {
-        combinedLabel = `Ajustado por ${seriesLabel}`;
-    } else {
-        combinedLabel = `Taxa Fixa ${fixedRate.toFixed(2)}% a.a.`;
-    }
-
-    datasets.push({
-        label: combinedLabel,
-        data: valuesCombined,
-        monthlyRates: monthlyRates, // Store rates here too
-        borderColor: '#4facfe',
-        backgroundColor: gradientCombined,
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: '#4facfe',
-        pointHoverBorderColor: '#ffffff',
-        pointHoverBorderWidth: 2
-    });
-
-    // Create chart
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index'
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        color: '#a0aec0',
-                        font: {
-                            size: 12,
-                            family: 'Inter'
-                        },
-                        padding: 15,
-                        usePointStyle: true,
-                        pointStyle: 'line'
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(21, 25, 50, 0.95)',
-                    titleColor: '#ffffff',
-                    bodyColor: '#a0aec0',
-                    borderColor: 'rgba(79, 172, 254, 0.5)',
-                    borderWidth: 1,
-                    padding: 12,
-                    displayColors: false,
-                    callbacks: {
-                        label: function (context) {
-                            let label = context.dataset.label + ': ' + formatCurrency(context.parsed.y);
-
-                            // Add rate information if available and using a series
-                            if (seriesLabel && context.dataset.monthlyRates) {
-                                const rate = context.dataset.monthlyRates[context.dataIndex];
-                                // Only add the rate line once per tooltip (usually checking if it's the first dataset or specific one)
-                                // But since we are in a label callback, we return a string or array of strings.
-                                // Let's append the rate to the label? No, separate line is better.
-                                // We can return an array: ['Value: R$...', 'Rate: 0.5%']
-                            }
-                            return label;
-                        },
-                        afterBody: function (contextItems) {
-                            // This runs once per tooltip (for all items)
-                            // We can use this to show the rate at the bottom
-                            if (!seriesLabel) return null;
-
-                            const context = contextItems[0];
-                            if (context.dataset.monthlyRates) {
-                                const rate = context.dataset.monthlyRates[context.dataIndex];
-                                if (rate !== undefined && rate !== null) {
-                                    return `Taxa ${seriesLabel}: ${formatPercentage(rate)}`;
-                                }
-                            }
-                            return null;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: '#718096',
-                        maxRotation: 45,
-                        minRotation: 45
-                    }
-                },
-                y: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: '#718096',
-                        callback: function (value) {
-                            return formatCurrency(value);
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Show chart card
-    const chartCard = document.getElementById('chartCard');
-    chartCard.style.display = 'block';
-}
 
 // ===================================
 // Form Validation
@@ -462,12 +277,6 @@ function validateForm(amount, startDate, endDate) {
     // Check if start date is before end date
     if (start >= end) {
         throw new Error('A data inicial deve ser anterior à data final.');
-    }
-
-    // Check if dates are not in the future
-    const today = new Date();
-    if (end > today) {
-        throw new Error('A data final não pode ser no futuro.');
     }
 
     // Check if date range is reasonable (IPCA data available from 1980)
@@ -524,26 +333,248 @@ async function handleCalculation(event) {
         // Fetch Data
         const seriesData = await fetchSeriesData(seriesCode, startDate, endDate);
 
-        // Calculate results
-        const totalVariation = calculateCumulativeRate(seriesData);
-        const finalValue = calculateCompoundValue(amount, seriesData, fixedRate, useSeriesRate);
-        const evolution = calculateInvestmentEvolution(amount, seriesData, fixedRate, useSeriesRate);
+        // Check if we need to project future data
+        const lastDataDate = parseAPIDate(seriesData[seriesData.length - 1].data);
+        const endDateTime = new Date(endDate + 'T00:00:00'); // Ensure time component doesn't mess up comparison
 
-        // Display results
+        let finalSeriesData = seriesData;
+        let isProjection = false;
+        let averageRate = 0;
+
+        if (endDateTime > lastDataDate) {
+            isProjection = true;
+            averageRate = calculateAverageRate(seriesData);
+            const futureData = generateFutureData(lastDataDate, endDateTime, averageRate);
+            finalSeriesData = [...seriesData, ...futureData];
+        }
+
+        const totalVariation = calculateCumulativeRate(finalSeriesData);
+        const finalValue = calculateCompoundValue(amount, finalSeriesData, fixedRate, useSeriesRate);
+        const evolution = calculateInvestmentEvolution(amount, finalSeriesData, fixedRate, useSeriesRate);
+
         const displayVariation = useSeriesRate ? totalVariation : 0;
 
-        displayResults(amount, finalValue, displayVariation, startDate, endDate, fixedRate, seriesLabel);
-
-        // Update chart
+        displayResults(amount, finalValue, displayVariation, startDate, endDate, fixedRate, seriesLabel, isProjection, averageRate);
         updateChart(evolution, amount, fixedRate, seriesLabel);
 
     } catch (error) {
         console.error('Erro no cálculo:', error);
         showError(error.message);
     } finally {
-        // Hide loading state
         setLoadingState(false);
     }
+}
+
+function calculateAverageRate(seriesData) {
+    // Take up to the last 12 months
+    const slice = seriesData.slice(-12);
+    if (slice.length === 0) return 0;
+
+    const sum = slice.reduce((acc, item) => acc + parseFloat(item.valor), 0);
+    return sum / slice.length;
+}
+
+function generateFutureData(startDate, endDate, rate) {
+    const futureData = [];
+    let currentDate = new Date(startDate);
+
+    // Move to next month first
+    currentDate.setMonth(currentDate.getMonth() + 1);
+
+    while (currentDate <= endDate) {
+        futureData.push({
+            data: formatDateForAPI(currentDate.toISOString().split('T')[0]),
+            valor: rate.toFixed(4),
+            isProjection: true
+        });
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+
+    return futureData;
+}
+
+function calculateInvestmentEvolution(initialValue, seriesData, annualFixedRate, useSeriesRate = true) {
+    const evolution = [];
+    let currentValueSeries = initialValue;
+    let currentValueCombined = initialValue;
+    const monthlyFixedRate = annualFixedRate / 12;
+
+    for (const item of seriesData) {
+        const monthlySeriesRate = useSeriesRate ? parseFloat(item.valor) : 0;
+
+        currentValueSeries *= (1 + monthlySeriesRate / 100);
+        currentValueCombined *= (1 + monthlySeriesRate / 100) * (1 + monthlyFixedRate / 100);
+
+        evolution.push({
+            date: parseAPIDate(item.data),
+            valueSeries: currentValueSeries,
+            valueCombined: currentValueCombined,
+            dateString: item.data,
+            isProjection: !!item.isProjection,
+            monthlyRate: monthlySeriesRate
+        });
+    }
+
+    return evolution;
+}
+
+function updateChart(evolution, initialValue, fixedRate, seriesLabel) {
+    const ctx = document.getElementById('investmentChart');
+
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
+    const labels = evolution.map(item => item.dateString);
+    const valuesSeries = evolution.map(item => item.valueSeries);
+    const valuesCombined = evolution.map(item => item.valueCombined);
+
+    // Gradients
+    const gradientSeries = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
+    gradientSeries.addColorStop(0, 'rgba(67, 233, 123, 0.3)');
+    gradientSeries.addColorStop(1, 'rgba(67, 233, 123, 0.05)');
+
+    const gradientCombined = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
+    gradientCombined.addColorStop(0, 'rgba(79, 172, 254, 0.5)');
+    gradientCombined.addColorStop(1, 'rgba(0, 242, 254, 0.1)');
+
+    const datasets = [];
+
+    // Helper for segment styling
+    const segmentStyle = (ctx, colorSolid, colorDashed) => {
+        return ctx.p0DataIndex < evolution.findIndex(e => e.isProjection) || evolution.every(e => !e.isProjection)
+            ? undefined // default style (solid)
+            : [6, 6]; // dashed
+    };
+
+    // Series Line (IPCA/SELIC)
+    datasets.push({
+        label: seriesLabel ? `Somente ${seriesLabel}` : 'Valor Base',
+        data: valuesSeries,
+        borderColor: '#43e97b',
+        backgroundColor: gradientSeries,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        segment: {
+            borderDash: (ctx) => evolution[ctx.p0DataIndex]?.isProjection ? [5, 5] : undefined,
+            borderColor: (ctx) => evolution[ctx.p0DataIndex]?.isProjection ? '#81e6d9' : '#43e97b'
+        },
+        pointHoverBackgroundColor: '#43e97b',
+        pointHoverBorderColor: '#ffffff',
+        pointHoverBorderWidth: 2
+    });
+
+    // Combined Line
+    if (fixedRate > 0 && seriesLabel) {
+        datasets.push({
+            label: `${seriesLabel} + ${fixedRate.toFixed(2)}% a.a.`,
+            data: valuesCombined,
+            borderColor: '#4facfe',
+            backgroundColor: gradientCombined,
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 6,
+            segment: {
+                borderDash: (ctx) => evolution[ctx.p0DataIndex]?.isProjection ? [5, 5] : undefined,
+                borderColor: (ctx) => evolution[ctx.p0DataIndex]?.isProjection ? '#90cdf4' : '#4facfe'
+            },
+            pointHoverBackgroundColor: '#4facfe',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2
+        });
+    }
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#a0aec0',
+                        font: {
+                            family: "'Inter', sans-serif"
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(21, 25, 50, 0.9)',
+                    titleColor: '#fff',
+                    bodyColor: '#a0aec0',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: {
+                        title: (context) => {
+                            const index = context[0].dataIndex;
+                            const item = evolution[index];
+                            let title = `Data: ${item.dateString}`;
+                            if (item.isProjection) {
+                                title += ' (Projeção)';
+                            }
+                            return title;
+                        },
+                        label: function (context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += formatCurrency(context.parsed.y);
+                            }
+                            return label;
+                        },
+                        afterBody: (context) => {
+                            const index = context[0].dataIndex;
+                            const item = evolution[index];
+                            const rateLabel = seriesLabel || 'Taxa';
+                            return `\n${rateLabel}: ${item.monthlyRate.toFixed(2)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#718096'
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#718096',
+                        callback: function (value) {
+                            return 'R$ ' + value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Show chart card
+    const chartCard = document.getElementById('chartCard');
+    chartCard.style.display = 'block';
 }
 
 // ===================================

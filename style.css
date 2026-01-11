@@ -460,6 +460,25 @@ body::before {
     font-weight: 600;
 }
 
+.warning-box {
+    padding: var(--spacing-md);
+    background: rgba(236, 201, 75, 0.1);
+    border: 1px solid rgba(236, 201, 75, 0.3);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-md);
+    animation: fadeIn 0.5s ease;
+}
+
+.warning-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+.warning-text strong {
+    color: #ecc94b;
+}
+
 /* ===================================
    Chart
    =================================== */
